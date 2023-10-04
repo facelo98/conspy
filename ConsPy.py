@@ -8,7 +8,7 @@ from collections import namedtuple
 import warnings
 import timeit
 
-warnings.filterwarnings("ignor
+warnings.filterwarnings("ignore")
 
 class utils:
 
@@ -869,10 +869,10 @@ class utils:
 
             if pc == 0:
                 break
+            pb = pd.DataFrame(pb)
 
-            minp = np.min(pb)
-            posp = np.where(pb == minp)
-
+            minp = np.min(pb[0])
+            posp = pb[0]= minp
             if minp <= po:
                 po = minp.copy()
                 cr = candidate.iloc[posp[0]]
@@ -881,14 +881,14 @@ class utils:
             else:
                 r = cr.copy()
                 addpenalty.iloc[[k]] = self.penalty(r, c, order.iloc[0, b])
-            break
+
 
             
         if pc == 0:
             po = 0
             addpenalty = 0
         else:
-            poo = np.sum(addpenalty)
+            po = np.sum(addpenalty)
 
         s_c = self.scorematrix(cr)
         po = np.sum(addpenalty)
@@ -1008,7 +1008,7 @@ class utils:
         d = x.shape[0]
         a = np.random.choice(range(d), d, replace=False)
         for j in [0, 1, 2]:
-            if a[j] == i:
+            if a[j] == i - 1:
                 a[j] = a[3]
         r1 = a[0]
         r2 = a[1]
@@ -1291,8 +1291,7 @@ class heuristics:
                 consensusD = utils().bb_consensus(rr=consensusC, c=c, full=callfull, ps=callps)[0]
                 consensus = consensusA.append([consensusB, consensusC, consensusD], ignore_index=True)
                 consensus = utils().reordering(consensus).drop_duplicates()
-                howcons = consensus.shape[0]
-
+                
                 tau = pd.DataFrame(np.zeros((consensus.shape[0], 1)))
                 for k in range(consensus.shape[0]):
                     s = utils().scorematrix(consensus.iloc[[k]])
@@ -1301,14 +1300,19 @@ class heuristics:
                     else:
                         tau.iloc[[k]] = np.sum((c * s).values) / (m * (n * (n - 1)))
 
-                if howcons > 1:
-                    nco = np.where(tau == np.max(tau))
+                if consensus.shape[0] > 1:
+                    
+                    nco = tau[0] == np.max(tau[0])
+                    
                     if len(nco) > 1:
-                        consensus = consensus[[nco]]
-                        tau = pd.DataFrame(np.repeat(np.max(tau), consensus.shape[0], 0))
+                        consensus.reset_index(drop = True, inplace = True)
+                        consensus = consensus[nco]
+                        consensus['tau'] = np.max(tau[0])
+                        tau = consensus['tau']
+                        consensus.drop(columns = 'tau', inplace = True)
                     else:
                         tau = np.max(tau)
-                        consensus = consensus.iloc[[nco]]
+                        consensus = consensus.iloc[nco]
                 tau.columns = ['Tau']
 
         return quick(Consensus=utils().reordering(consensus), Tau=tau)
@@ -1323,83 +1327,82 @@ class heuristics:
         n = c.shape[1]
         population = pd.DataFrame(np.zeros((nP - 1, n)))
         population.columns = c.columns
-        if isinstance(type(c), type(None)):
-            for k in range(nP - 1):
-                population.iloc[[k]] = np.random.choice(range(1, n + 1), n, replace=False)
 
-            
-            population = population.append(utils().findconsensus_BB(c=c, full=full))
-            costs = pd.DataFrame(np.zeros((nP, 1)))
-            taos = costs.copy()
+        for k in range(nP - 1):
+            population.iloc[[k]] = np.random.choice(range(1, n + 1), n, replace=False)
 
+        
+        population = population.append(utils().findconsensus_BB(c=c, full=full))
+        costs = pd.DataFrame(np.zeros((nP, 1)))
+        taos = costs.copy()
+
+        for i in range(nP):
+            cota = utils().combincost(ranking=population.iloc[[i]], c=c, m=nj)
+            costs.iloc[[i]] = cota[1]
+            taos.iloc[[i]] = cota[0]
+
+        bestc = np.min(costs)
+        bestind = np.where(costs == bestc)
+        bestT = pd.DataFrame(np.max(taos))
+        besti = population.iloc[bestind[0], :]
+        g = 1
+        no_gain = 0
+
+        while no_gain < l:
             for i in range(nP):
-                cota = utils().combincost(ranking=population.iloc[[i]], c=c, m=nj)
-                costs.iloc[[i]] = cota[1]
-                taos.iloc[[i]] = cota[0]
-
-            bestc = np.min(costs)
-            bestind = np.where(costs == bestc)
-            bestT = pd.DataFrame(np.max(taos))
-            besti = population.iloc[bestind[0], :]
-            g = 1
-            no_gain = 0
-
-            while no_gain < l:
-                for i in range(nP):
-                    evolution = utils().mutaterand1(x=population, ff=ff, i=i)
-                    evolution = utils().crossover(x=population.iloc[[i]], v=evolution, cr=cr)
-                    if full:
-                        evolution = np.argsort(evolution)
-                    else:
-                        evolution = utils().childtie(evolution)
-
-                    cotan = utils().combincost(ranking=evolution, c=c, m=nj)
-                    cost_new = cotan[1]
-                    ta_new = cotan[0]
-                    if cost_new < costs.iloc[i, 0]:
-                        population.iloc[[i]] = evolution
-                        costs.iloc[i, 0] = cost_new
-                        taos.iloc[[i]] = ta_new
-
-                bestco = np.min(costs)
-                bestc = pd.DataFrame(bestc).append(bestco, ignore_index=True)
-                bestind = np.where(costs == bestco)
-                bestTa = pd.DataFrame(np.max(taos))
-                bestT = bestT.append(bestTa, ignore_index=True)
-                bestin = population.iloc[bestind[0]]
-                besti = besti.append(bestin)
-
-                if np.array(bestc.iloc[[g]]) == np.array(bestc.iloc[[g-1]]):
-                    no_gain += 1
+                evolution = utils().mutaterand1(x=population, ff=ff, i=i)
+                evolution = utils().crossover(x=population.iloc[[i]], v=evolution, cr=cr)
+                if full:
+                    evolution = np.argsort(evolution)
                 else:
-                    no_gain = 0
+                    evolution = utils().childtie(evolution)
 
-                g += 1
+                cotan = utils().combincost(ranking=evolution, c=c, m=nj)
+                cost_new = cotan[1]
+                ta_new = cotan[0]
+                if cost_new < costs.iloc[i, 0]:
+                    population.iloc[[i]] = evolution
+                    costs.iloc[i, 0] = cost_new
+                    taos.iloc[[i]] = ta_new
 
-            indexes = pd.DataFrame(np.where(bestc == np.min(bestc)))
+            bestco = np.min(costs)
+            bestc = pd.DataFrame(bestc).append(bestco, ignore_index=True)
+            bestind = np.where(costs == bestco)
+            bestTa = pd.DataFrame(np.max(taos))
+            bestT = bestT.append(bestTa, ignore_index=True)
+            bestin = population.iloc[bestind[0]]
+            besti = besti.append(bestin)
 
-            if full:
-                if indexes.shape[1] == 1:
-                    bests = utils().childclosint(besti.iloc[indexes])
-                else:
-                    bests = pd.DataFrame(np.zeros((indexes.shape[1], n)))
-                    for j in range(indexes.shape[1]):
-                        bests.iloc[[j]]= utils().childclosint(besti.iloc[[indexes.iloc[0, j]]]) 
-                        
+            if np.array(bestc.iloc[[g]]) == np.array(bestc.iloc[[g-1]]):
+                no_gain += 1
             else:
-                if indexes.shape[1] == 1:
-                    bests = utils().reordering(besti.iloc[indexes])
-                else:
-                    for j in range(indexes.shape[1]):
-                        bests = utils().reordering(besti.iloc[[indexes.iloc[0, j]]])
+                no_gain = 0
 
-            avgTau = bestT.iloc[[indexes.iloc[0, j]]]
-            consR = bests.drop_duplicates()
-            tau = avgTau[[0]]
+            g += 1
+
+        indexes = pd.DataFrame(np.where(bestc == np.min(bestc)))
+
+        if full:
+            if indexes.shape[1] == 1:
+                bests = utils().childclosint(besti.iloc[indexes])
+            else:
+                bests = pd.DataFrame(np.zeros((indexes.shape[1], n)))
+                for j in range(indexes.shape[1]):
+                    bests.iloc[[j]]= utils().childclosint(besti.iloc[[indexes.iloc[0, j]]]) 
+                    
         else:
-            _best_ = utils().mutate_D5(c, wk, full)
+            if indexes.shape[1] == 1:
+                bests = utils().reordering(besti.iloc[indexes])
+            else:
+                for j in range(indexes.shape[1]):
+                    bests = utils().reordering(besti.iloc[[indexes.iloc[0, j]]])
 
-        return decor(Consensus=_best_[0], Tau=_best_[1]) 
+        avgTau = bestT.iloc[[indexes.iloc[0, j]]]
+        consR = bests.drop_duplicates()
+        tau = avgTau[[0]]
+
+
+        return decor(Consensus= consR, Tau= tau) 
 
 
     def conspy(self, x:pd.DataFrame, wk:pd.DataFrame=None, full:bool = False, ps:bool = False, algorithm:str = 'BB', maxiter:float = 100, nP:float = 15, gl:float = 100, ff:float = 0.4, cr:float = 0.9):
@@ -1458,27 +1461,3 @@ class heuristics:
             print('Processing time: {}'.format(timeit.default_timer() - start_processing))
 
         return consensus
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
